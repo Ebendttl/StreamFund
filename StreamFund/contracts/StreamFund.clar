@@ -138,3 +138,49 @@
   (map-get? Contributions { campaign-id: campaign-id, contributor: contributor })
 )
 
+;; Deactivate campaign
+(define-public (deactivate-campaign (campaign-id uint))
+  (let
+    (
+      (campaign (unwrap! (map-get? Campaigns { campaign-id: campaign-id }) ERR-CAMPAIGN-NOT-FOUND))
+      (creator (get creator campaign))
+      (total-raised (get total-raised campaign))
+      (min-contribution (get min-contribution campaign))
+      (vesting-start (get vesting-start campaign))
+      (vesting-duration (get vesting-duration campaign))
+      (total-vested (get total-vested campaign))
+      (current-height block-height)
+      (is-active (get active campaign))
+      (elapsed (if (> current-height vesting-start) (- current-height vesting-start) u0))
+      (vested-so-far (/ (* total-raised elapsed) vesting-duration))
+      (remaining-to-vest (if (> vested-so-far total-vested) (- vested-so-far total-vested) u0))
+    )
+    ;; Authorization and state validation
+    (asserts! (is-eq tx-sender creator) ERR-NOT-AUTHORIZED)
+    (asserts! is-active ERR-CAMPAIGN-INACTIVE)
+    
+    ;; Update campaign status to inactive
+    (map-set Campaigns
+      { campaign-id: campaign-id }
+      (merge campaign { active: false })
+    )
+    
+    ;; Detailed logging of deactivation event
+    (print {
+      event: "campaign-deactivated",
+      campaign-id: campaign-id,
+      creator: creator,
+      total-raised: total-raised,
+      min-contribution: min-contribution,
+      vesting-start: vesting-start,
+      vesting-duration: vesting-duration,
+      total-vested: total-vested,
+      vested-so-far: vested-so-far,
+      remaining-to-vest: remaining-to-vest,
+      deactivation-height: current-height
+    })
+    
+    ;; Return success
+    (ok true)
+  )
+)
